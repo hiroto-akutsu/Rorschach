@@ -107,7 +107,7 @@ class RorschachCommand extends Command
                 $output->writeln('<info>pre-request</info>');
             }
 
-            foreach ($setting['pre-request'] as $request) {
+            foreach ((array)$setting['pre-request'] as $request) {
                 $response = (new Request($setting, $request))->request();
                 if ($output->getVerbosity() >= OutputInterface::VERBOSITY_VERBOSE) {
                     $line = "<comment>{$request['method']} {$request['url']}</comment>";
@@ -115,7 +115,7 @@ class RorschachCommand extends Command
                     $output->writeln($response->getStatusCode());
                     $output->writeln((string)$response->getBody());
                 }
-                $binds = array_merge($binds, Request::getBindParams($response, $request['bind'], $request['after-function']));
+                $binds = array_merge($binds, Request::getBindParams($response, (array)$request['bind'], $request['after-function']));
             }
 
             // bind vars after pre-requests
