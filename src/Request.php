@@ -52,10 +52,6 @@ class Request
      */
     public static function getBindParams(GuzzleResponse $response, $binds, $function)
     {
-        if ($response->getStatusCode() >= 400) {
-            throw new \Exception('Pre-request failed.');
-        }
-
         if ($function) {
             $body = $function($response);
         } else {

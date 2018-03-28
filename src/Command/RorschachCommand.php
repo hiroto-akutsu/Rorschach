@@ -115,6 +115,11 @@ class RorschachCommand extends Command
                     $output->writeln($response->getStatusCode());
                     $output->writeln((string)$response->getBody());
                 }
+
+                if ($response->getStatusCode() >= 400) {
+                    throw new \Exception('Pre-request failed.');
+                }
+
                 $binds = array_merge($binds, Request::getBindParams($response, (array)$request['bind'], $request['after-function']));
             }
 
