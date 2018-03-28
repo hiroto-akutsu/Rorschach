@@ -134,6 +134,10 @@ class RorschachCommand extends Command
             }
 
             foreach ($setting['request'] as $request) {
+                // bind vars
+                $yaml = Parser::dump($request);
+                $compiled = Parser::compile($yaml, $binds);
+                $request = Parser::parse($compiled);
 
                 if ($input->getOption('output')) {
                     $description = $request['description'];
@@ -150,6 +154,8 @@ class RorschachCommand extends Command
                     $output->writeln($response->getStatusCode());
                     $output->writeln((string)$response->getBody());
                 }
+
+                $binds = array_merge($binds, Request::getBindParams($response, (array)$request['bind'], $request['after-function']));
 
                 foreach ($request['expect'] as $type => $expect) {
                     $result = false;

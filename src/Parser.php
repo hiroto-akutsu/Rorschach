@@ -60,6 +60,17 @@ class Parser
     }
 
     /**
+     * Dumps a PHP value to a YAML string.
+     *
+     * @param $input
+     * @return string
+     */
+    public static function dump($input)
+    {
+        return Yaml::dump($input);
+    }
+
+    /**
      * search column vars in object.
      *
      * @param $pattern
