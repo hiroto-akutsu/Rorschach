@@ -205,7 +205,7 @@ class RorschachCommand extends Command
                 $output->write("Congrats!!🍻 \n");
             }
         } else {
-            $output->write('finished');
+            $output->write("finished\n");
         }
     }
 
