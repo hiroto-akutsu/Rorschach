@@ -27,25 +27,25 @@ class RorschachCommand extends Command
             ->addOption(
                 'file',
                 null,
-                InputOption::VALUE_OPTIONAL | InputOption::VALUE_IS_ARRAY,
+                InputOption::VALUE_REQUIRED | InputOption::VALUE_IS_ARRAY,
                 'test file path.'
             )
             ->addOption(
                 'bind',
                 'b',
-                InputOption::VALUE_OPTIONAL | InputOption::VALUE_IS_ARRAY,
+                InputOption::VALUE_REQUIRED | InputOption::VALUE_IS_ARRAY,
                 'binding parameter.'
             )
             ->addOption(
                 'env-file',
                 null,
-                InputOption::VALUE_OPTIONAL,
+                InputOption::VALUE_REQUIRED,
                 'file of environment variables.'
             )
             ->addOption(
                 'dir',
                 'd',
-                InputOption::VALUE_OPTIONAL,
+                InputOption::VALUE_REQUIRED,
                 'test files dir.'
             )
             ->addOption(
@@ -57,8 +57,9 @@ class RorschachCommand extends Command
             ->addOption(
                 'output',
                 'o',
-                InputOption::VALUE_NONE,
-                'display output.'
+                InputOption::VALUE_REQUIRED,
+                'display output level.',
+                array('simple', 'normal', 'debug')
             );
     }
 
@@ -69,8 +70,18 @@ class RorschachCommand extends Command
      */
     protected function execute(InputInterface $input, OutputInterface $output)
     {
-        if ($input->getOption('output')) {
-            $output->setVerbosity(OutputInterface::VERBOSITY_DEBUG);
+        switch ($input->getOption('output')) {
+            case 'simple':
+                $output->setVerbosity(OutputInterface::VERBOSITY_NORMAL);
+                break;
+
+            case 'debug':
+                $output->setVerbosity(OutputInterface::VERBOSITY_DEBUG);
+                break;
+
+            case 'normal':
+            default:
+                $output->setVerbosity(OutputInterface::VERBOSITY_VERBOSE);
         }
 
         $this->loadDotEnv($input->getOption('env-file'));
@@ -109,8 +120,8 @@ class RorschachCommand extends Command
 
             foreach ((array)$setting['pre-request'] as $request) {
                 $response = (new Request($setting, $request))->request();
-                if ($output->getVerbosity() >= OutputInterface::VERBOSITY_VERBOSE) {
-                    $line = "<comment>{$request['method']} {$request['url']}</comment>";
+                if ($output->getVerbosity() >= OutputInterface::VERBOSITY_DEBUG) {
+                    $line = "<comment>{$request['method']}\t{$request['url']}</comment>";
                     $output->writeln($line);
                     $output->writeln($response->getStatusCode());
                     $output->writeln((string)$response->getBody());
@@ -127,7 +138,7 @@ class RorschachCommand extends Command
             $compiled = Parser::compile($precompiled, $binds);
             $setting = Parser::parse($compiled);
 
-            if ($output->getVerbosity() >= OutputInterface::VERBOSITY_VERBOSE) {
+            if (isset($setting['pre-request']) && $output->getVerbosity() >= OutputInterface::VERBOSITY_DEBUG) {
                 $vars = Parser::searchVars($compiled);
                 foreach ($vars as $var) {
                     $output->writeln('<error>unbound variable: '.$var.'</error>');
@@ -144,42 +155,29 @@ class RorschachCommand extends Command
                 $compiled = Parser::compile($yaml, $binds);
                 $request = Parser::parse($compiled);
 
-                if ($input->getOption('output')) {
-                    $description = $request['description'];
-                    if (!empty($description)) {
-                        $output->writeln("<comment>{$description}</comment>");
-                    }
-                }
-
-                $line = "<comment>{$request['method']} {$request['url']}</comment>";
-                $output->writeln($line);
-
                 $response = (new Request($setting, $request))->request();
-                if ($output->getVerbosity() >= OutputInterface::VERBOSITY_VERBOSE) {
-                    $output->writeln($response->getStatusCode());
-                    $output->writeln((string)$response->getBody());
-                }
 
                 $binds = array_merge($binds, Request::getBindParams($response, (array)$request['bind'], $request['after-function']));
 
+                $outputs = [];
                 foreach ($request['expect'] as $type => $expect) {
                     $result = false;
                     switch ($type) {
                         case 'code':
                             $result = (new Assert\StatusCode($response, $expect))->assert();
-                            $output->writeln($this->buildMessage($type, $expect, $result));
+                            $outputs[] = [$type, $expect, $result];
                             break;
                         case 'has':
                             foreach ($expect as $col) {
                                 $result = (new Assert\HasProperty($response, $col))->assert();
-                                $output->writeln($this->buildMessage($type, $col, $result));
+                                $outputs[] = [$type, $col, $result];
                             }
                             break;
                         case 'type':
                             $errResults = [];
                             foreach ($expect as $col => $val) {
                                 $assertResult = (new Assert\Type($response, $col, $val))->assert();
-                                $output->writeln($this->buildMessage($type, "$col:$val", count($assertResult) === 0));
+                                $outputs[] = [$type, "$col:$val", count($assertResult) === 0];
                                 if (!empty($assertResult)) {
                                     $errResults[] = $assertResult;
                                 }
@@ -191,12 +189,12 @@ class RorschachCommand extends Command
                         case 'value':
                             foreach ($expect as $col => $val) {
                                 $result = (new Assert\Value($response, $col, $val))->assert();
-                                $output->writeln($this->buildMessage($type, $val, $result));
+                                $outputs[] = [$type, $val, $result];
                             }
                             break;
                         case 'redirect':
                             $result = (new Assert\Redirect($response, $expect))->assert();
-                            $output->writeln($this->buildMessage($type, $expect, $result));
+                            $outputs[] = [$type, $expect, $result];
                             break;
                         default:
                             throw new \Exception('Unknown expect type given.');
@@ -204,6 +202,39 @@ class RorschachCommand extends Command
 
                     if (!$result) {
                         $hasError = true;
+                    }
+                }
+
+                $line = "<comment>{$request['method']}\t{$request['url']}</comment>";
+
+                if ($output->getVerbosity() == OutputInterface::VERBOSITY_NORMAL) {
+                    if ($hasError) {
+                        $line .= "\t<error>FAILED.</error>";
+                    } else {
+                        $line .= "\t<question>PASSED.</question>";
+                    }
+                }
+
+                $output->writeln($line);
+
+                if ($output->getVerbosity() >= OutputInterface::VERBOSITY_DEBUG) {
+                    $vars = Parser::searchVars($compiled);
+                    foreach ($vars as $var) {
+                        $output->writeln('<error>unbound variable: '.$var.'</error>');
+                    }
+
+                    $description = $request['description'];
+                    if (!empty($description)) {
+                        $output->writeln("<comment>{$description}</comment>");
+                    }
+
+                    $output->writeln($response->getStatusCode());
+                    $output->writeln((string)$response->getBody());
+                }
+
+                if ($hasError || $output->getVerbosity() >= OutputInterface::VERBOSITY_VERBOSE) {
+                    foreach ($outputs as $vars) {
+                        $output->writeln($this->buildMessage($vars[0], $vars[1], $vars[2]));
                     }
                 }
             }
@@ -216,7 +247,7 @@ class RorschachCommand extends Command
                 $output->write("Congrats!!🍻 \n");
             }
         } else {
-            $output->write("finished\n");
+            $output->writeln("finished");
         }
     }
 
