@@ -318,12 +318,12 @@ class RorschachCommand extends Command
      */
     private function fetchDirTargets($dir)
     {
-        $targetDir = '';
         // 相対パス
         if (substr($dir, 0, 1) == '.') {
             $targetDir = __DIR__ . '/../../../../../' . $dir;
-            // 絶対パス
-        } else {
+        }
+        // 絶対パス
+        else {
             $targetDir = $dir;
         }
 
@@ -331,7 +331,8 @@ class RorschachCommand extends Command
         $finder = new Finder();
         $finder->files()
             ->in($targetDir)
-            ->name('test*.yml');
+            ->name('*.yml')
+            ->name('*.yaml');
         foreach ($finder as $file) {
             $targets[] = $file->getRealPath();
         }
