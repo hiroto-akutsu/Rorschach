@@ -149,6 +149,7 @@ class RorschachCommand extends Command
                 $output->writeln('<info>request</info>');
             }
 
+            $requestError = false;
             foreach ($setting['request'] as $request) {
                 // bind vars
                 $yaml = Parser::dump($request);
@@ -161,54 +162,68 @@ class RorschachCommand extends Command
 
                 $outputs = [];
                 foreach ($request['expect'] as $type => $expect) {
-                    $result = false;
                     switch ($type) {
                         case 'code':
                             $result = (new Assert\StatusCode($response, $expect))->assert();
                             $outputs[] = [$type, $expect, $result];
                             break;
+
                         case 'has':
                             foreach ($expect as $col) {
                                 $result = (new Assert\HasProperty($response, $col))->assert();
                                 $outputs[] = [$type, $col, $result];
-                            }
-                            break;
-                        case 'type':
-                            $errResults = [];
-                            foreach ($expect as $col => $val) {
-                                $assertResult = (new Assert\Type($response, $col, $val))->assert();
-                                $outputs[] = [$type, "$col:$val", count($assertResult) === 0];
-                                if (!empty($assertResult)) {
-                                    $errResults[] = $assertResult;
+
+                                if (! $result) {
+                                    $requestError = true;
                                 }
                             }
-                            if (empty($errResults)) {
-                                $result = true;
+                            break;
+
+                        case 'type':
+                            foreach ($expect as $col => $val) {
+                                $errors = (new Assert\Type($response, $col, $val))->assert();
+                                $result = (count($errors) === 0);
+                                $outputs[] = [$type, "$col:$val", $result];
+
+                                if (! $result) {
+                                    $requestError = true;
+                                }
                             }
                             break;
+
                         case 'value':
                             foreach ($expect as $col => $val) {
                                 $result = (new Assert\Value($response, $col, $val))->assert();
-                                $outputs[] = [$type, $val, $result];
+                                $outputs[] = [$type, "$col:$val", $result];
+
+                                if (! $result) {
+                                    $requestError = true;
+                                }
                             }
                             break;
+
                         case 'redirect':
                             $result = (new Assert\Redirect($response, $expect))->assert();
                             $outputs[] = [$type, $expect, $result];
                             break;
+
                         default:
                             throw new \Exception('Unknown expect type given.');
                     }
 
-                    if (!$result) {
-                        $hasError = true;
+                    if (! $result) {
+                        $requestError = true;
                     }
+                }
+
+                if ($requestError) {
+                    $hasError = true;
                 }
 
                 $line = "<comment>{$request['method']}\t{$request['url']}</comment>";
 
                 if ($output->getVerbosity() == OutputInterface::VERBOSITY_NORMAL) {
-                    if ($hasError) {
+                    if ($requestError) {
                         $line .= "\t<error>FAILED.</error>";
                     } else {
                         $line .= "\t<question>PASSED.</question>";
@@ -232,7 +247,7 @@ class RorschachCommand extends Command
                     $output->writeln((string)$response->getBody());
                 }
 
-                if ($hasError || $output->getVerbosity() >= OutputInterface::VERBOSITY_VERBOSE) {
+                if ($requestError || $output->getVerbosity() >= OutputInterface::VERBOSITY_VERBOSE) {
                     foreach ($outputs as $vars) {
                         $output->writeln($this->buildMessage($vars[0], $vars[1], $vars[2]));
                     }
