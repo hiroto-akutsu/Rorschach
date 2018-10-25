@@ -149,8 +149,9 @@ class RorschachCommand extends Command
                 $output->writeln('<info>request</info>');
             }
 
-            $requestError = false;
             foreach ($setting['request'] as $request) {
+                $requestError = false;
+
                 // bind vars
                 $yaml = Parser::dump($request);
                 $compiled = Parser::compile($yaml, $binds);
